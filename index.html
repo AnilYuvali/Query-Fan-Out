@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google AI Mode Query Fan-Out Analyzer</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .input-section {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            border-left: 4px solid #3498db;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .input-group input, .input-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .input-group input:focus, .input-group textarea:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+
+        .content-textarea {
+            min-height: 200px;
+            resize: vertical;
+            font-family: inherit;
+        }
+
+        .analyze-btn {
+            background: linear-gradient(135deg, #3498db 0%, #2c3e50 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            font-weight: 600;
+        }
+
+        .analyze-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .analyze-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .results-section {
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 25px;
+            margin-top: 30px;
+            display: none;
+        }
+
+        .results-section.show {
+            display: block;
+        }
+
+        .results-header {
+            background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .results-content {
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.4;
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 6px;
+            border-left: 4px solid #27ae60;
+        }
+
+        .error {
+            background: #e74c3c;
+            color: white;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .instructions {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .instructions h3 {
+            color: #856404;
+            margin-bottom: 15px;
+        }
+
+        .instructions ul {
+            padding-left: 20px;
+        }
+
+        .instructions li {
+            margin-bottom: 8px;
+            color: #856404;
+        }
+
+        .char-counter {
+            text-align: right;
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Google AI Mode Query Fan-Out Analyzer</h1>
+            <p>Google AI Mode’da kullanılan query fan-out, kullanıcının yaptığı bir sorguya karşılık, eş zamanlı olarak birbiriyle ilişkili birden fazla arama yapan ve bu sonuçları birleştirerek tek bir yanıt oluşturan bir tekniktir. Bu teknik sayesinde, Google'da yapılan geleneksel bir aramaya kıyasla AI Mode'da çok daha geniş kapsamlı ve derinlemesine bilgiler sunulabiliyor.</p>
+        </div>
+
+        <div class="content">
+            <div class="instructions">
+                <h3>📋 Talimatlar</h3>
+                <ul>
+                    <li>Analiz edeceğimiz içeriği aşağıdaki içerik alanına ekliyoruz.</li>
+                    <li>"İçeriği Analiz Et" butonuna tıklıyoruz.</li>
+                    <li>Ardından tool, içerikteki semantik öbekleri çıkararak olası query fan-out sorgularını yazacak.</li>
+                    <li>Ayrıca sonuçlarda coverage puanı ve içeriği Google AI mode'a göre optimize etmek için öneriler gösterilecek.</li>
+                </ul>
+            </div>
+
+            <div class="input-section">
+                <div class="input-group">
+                    <label for="contentInput">Analiz Edilecek İçerik</label>
+                    <textarea 
+                        id="contentInput" 
+                        class="content-textarea" 
+                        placeholder="AI Mode query fan-out analizi için içeriği buraya ekle..."
+                        oninput="updateCharCounter()"
+                    ></textarea>
+                    <div class="char-counter">
+                        <span id="charCounter">0 karakter</span>
+                    </div>
+                </div>
+
+                <button class="analyze-btn" onclick="analyzeContent()">
+                    🔍 İçeriği Analiz Et
+                </button>
+            </div>
+
+            <div id="loading" class="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p>İçerik analiz ediliyor...</p>
+            </div>
+
+            <div id="results" class="results-section">
+                <div class="results-header">
+                    <h3>📊 Analiz Sonuçları</h3>
+                </div>
+                <div id="resultsContent" class="results-content"></div>
+            </div>
+
+            <div id="error" class="error" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        // AI Query Fan-Out Detection Tool
+        // Modified for manual content input with hardcoded API key
+        
+        // Hardcoded Gemini API Key
+        
+
+        // Extract semantic chunks from content
+        function extractSemanticChunksFromContent(content) {
+            const chunks = [];
+            
+            // Try to parse as HTML first
+            let doc;
+            try {
+                const parser = new DOMParser();
+                doc = parser.parseFromString(content, 'text/html');
+                
+                // Check if it's valid HTML with meaningful structure
+                if (doc.body && (doc.body.children.length > 0 || doc.head.children.length > 0)) {
+                    return extractFromHTML(doc);
+                }
+            } catch (e) {
+                // If HTML parsing fails, treat as plain text
+            }
+            
+            // If not HTML or HTML parsing failed, process as plain text
+            return extractFromPlainText(content);
+        }
+
+        function extractFromHTML(doc) {
+            const chunks = [];
+            
+            // Extract title and main heading
+            const title = doc.title || '';
+            const h1 = doc.querySelector('h1')?.textContent || '';
+            if (title || h1) {
+                chunks.push({
+                    type: 'primary_topic',
+                    content: `${title} ${h1}`.trim()
+                });
+            }
+            
+            // Extract headings and their content (layout-aware chunking)
+            const headings = doc.querySelectorAll('h2, h3, h4, h5, h6');
+            headings.forEach(heading => {
+                let content = heading.textContent;
+                let sibling = heading.nextElementSibling;
+                let sectionContent = '';
+                
+                while (sibling && !['H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(sibling.tagName)) {
+                    if (sibling.textContent) {
+                        sectionContent += ' ' + sibling.textContent;
+                    }
+                    sibling = sibling.nextElementSibling;
+                }
+                
+                if (sectionContent.trim()) {
+                    chunks.push({
+                        type: 'section',
+                        heading: content,
+                        content: sectionContent.trim().substring(0, 500)
+                    });
+                }
+            });
+            
+            // Extract key lists and FAQs
+            doc.querySelectorAll('ul, ol').forEach((list, idx) => {
+                if (idx < 5 && list.children.length > 1) {
+                    chunks.push({
+                        type: 'list',
+                        content: Array.from(list.children).map(li => li.textContent).join(' | ').substring(0, 300)
+                    });
+                }
+            });
+            
+            // Extract paragraphs if no headings found
+            if (chunks.filter(c => c.type === 'section').length === 0) {
+                const paragraphs = doc.querySelectorAll('p');
+                paragraphs.forEach((p, idx) => {
+                    if (idx < 5 && p.textContent.trim().length > 50) {
+                        chunks.push({
+                            type: 'paragraph',
+                            content: p.textContent.trim().substring(0, 300)
+                        });
+                    }
+                });
+            }
+            
+            // Extract schema.org data if present
+            const schemas = doc.querySelectorAll('script[type="application/ld+json"]');
+            schemas.forEach(schema => {
+                try {
+                    const data = JSON.parse(schema.textContent);
+                    if (data['@type']) {
+                        chunks.push({
+                            type: 'structured_data',
+                            content: `Type: ${data['@type']}, ${JSON.stringify(data).substring(0, 200)}`
+                        });
+                    }
+                } catch (e) {}
+            });
+            
+            return chunks;
+        }
+
+        function extractFromPlainText(content) {
+            const chunks = [];
+            const lines = content.split('\n').filter(line => line.trim().length > 0);
+            
+            // Try to identify title/heading patterns
+            const titlePattern = /^(.{1,100})$/;
+            const headingPatterns = [
+                /^#{1,6}\s+(.+)$/,  // Markdown headings
+                /^(.+):\s*$/,       // Colon-ended headings
+                /^[A-Z][A-Z\s]+$/,  // ALL CAPS headings
+                /^\d+\.\s+(.+)$/    // Numbered headings
+            ];
+            
+            let currentSection = null;
+            let sectionContent = '';
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                
+                // Check if this line is a heading
+                let isHeading = false;
+                let headingText = '';
+                
+                for (const pattern of headingPatterns) {
+                    const match = line.match(pattern);
+                    if (match) {
+                        isHeading = true;
+                        headingText = match[1] || match[0];
+                        break;
+                    }
+                }
+                
+                // If it's the first line and looks like a title
+                if (i === 0 && line.length < 100 && !line.includes('.')) {
+                    chunks.push({
+                        type: 'primary_topic',
+                        content: line
+                    });
+                    continue;
+                }
+                
+                if (isHeading) {
+                    // Save previous section if exists
+                    if (currentSection && sectionContent.trim()) {
+                        chunks.push({
+                            type: 'section',
+                            heading: currentSection,
+                            content: sectionContent.trim().substring(0, 500)
+                        });
+                    }
+                    
+                    // Start new section
+                    currentSection = headingText;
+                    sectionContent = '';
+                } else {
+                    // Add to current section content
+                    sectionContent += ' ' + line;
+                }
+            }
+            
+            // Save final section
+            if (currentSection && sectionContent.trim()) {
+                chunks.push({
+                    type: 'section',
+                    heading: currentSection,
+                    content: sectionContent.trim().substring(0, 500)
+                });
+            }
+            
+            // If no clear structure found, create chunks from paragraphs
+            if (chunks.length === 0) {
+                const paragraphs = content.split('\n\n').filter(p => p.trim().length > 50);
+                paragraphs.forEach((p, idx) => {
+                    if (idx < 5) {
+                        chunks.push({
+                            type: 'paragraph',
+                            content: p.trim().substring(0, 300)
+                        });
+                    }
+                });
+            }
+            
+            return chunks;
+        }
+
+        // Call Gemini API
+        async function callGeminiAPI(prompt) {
+            if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
+                throw new Error('Analysis prompt is empty or invalid.');
+            }
+
+            const requestData = {
+                contents: [{
+                    role: "user",
+                    parts: [{
+                        text: prompt
+                    }]
+                }],
+                generationConfig: {
+                    temperature: 0.3,
+                    topK: 20,
+                    topP: 0.9,
+                    maxOutputTokens: 2048
+                }
+            };
+
+            const response = await fetch('/api/analyze', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestData)
+            });
+
+            if (!response.ok) {
+                let errorMessage = `API Error: ${response.status} ${response.statusText}`;
+                try {
+                    const errorDetails = await response.json();
+                    if (errorDetails.error && errorDetails.error.message) {
+                        errorMessage += ` - ${errorDetails.error.message}`;
+                    } else if (errorDetails.error) {
+                        errorMessage += ` - ${JSON.stringify(errorDetails.error)}`;
+                    } else if (errorDetails.message) {
+                        errorMessage += ` - ${errorDetails.message}`;
+                    }
+                } catch (e) {
+                    // Could not parse error details, stick with default
+                }
+                throw new Error(errorMessage);
+            }
+
+            const data = await response.json();
+            
+            if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+                return data.candidates[0].content.parts[0].text;
+            } else {
+                throw new Error('Invalid Gemini response format');
+            }
+        }
+
+        // Main analysis function
+        async function analyzeContent() {
+            const content = document.getElementById('contentInput').value.trim();
+            
+            if (!content) {
+                showError('Please enter content to analyze');
+                return;
+            }
+
+            if (content.length < 50) {
+                showError('Please enter more substantial content (at least 50 characters)');
+                return;
+            }
+
+            showLoading(true);
+            hideError();
+            hideResults();
+
+            try {
+                // Extract semantic chunks
+                const chunks = extractSemanticChunksFromContent(content);
+                
+                // Create comprehensive prompt for Gemini
+                const prompt = `You are analyzing content for Google's AI Mode query fan-out potential. Google's AI Mode decomposes user queries into multiple sub-queries to synthesize comprehensive answers.
+
+CONTENT ANALYSIS:
+Content Length: ${content.length} characters
+Content Type: ${content.includes('<') && content.includes('>') ? 'HTML/Markup' : 'Plain Text'}
+
+SEMANTIC CHUNKS EXTRACTED:
+${JSON.stringify(chunks, null, 2)}
+
+Based on this content, perform the following analysis:
+
+1. IDENTIFY PRIMARY ENTITY: What is the main ontological entity or topic of this content?
+
+2. PREDICT FAN-OUT QUERIES: Generate 8-10 likely sub-queries that Google's AI might create when a user asks about this topic. Consider:
+   - Related queries (broader context)
+   - Implicit queries (unstated user needs)
+   - Comparative queries (alternatives, comparisons)
+   - Procedural queries (how-to aspects)
+   - Contextual refinements (budget, size, location specifics)
+
+3. SEMANTIC COVERAGE SCORE: For each predicted query, assess if the content provides information to answer it (Yes/Partial/No).
+
+4. FOLLOW-UP QUESTION POTENTIAL: What follow-up questions would users likely ask after reading this content?
+
+OUTPUT FORMAT:
+PRIMARY ENTITY: [entity name]
+
+FAN-OUT QUERIES:
+• [Query 1] - Coverage: [Yes/Partial/No]
+• [Query 2] - Coverage: [Yes/Partial/No]
+...
+
+FOLLOW-UP POTENTIAL:
+• [Follow-up question 1]
+• [Follow-up question 2]
+...
+
+COVERAGE SCORE: [X/10 queries covered]
+RECOMMENDATIONS: [Specific content gaps to fill]`;
+
+                // Call Gemini API
+                const analysis = await callGeminiAPI(prompt);
+                
+                // Format and display results
+                let output = '=== GOOGLE AI MODE QUERY FAN-OUT ANALYSIS ===\n\n';
+                output += analysis;
+                output += '\n\n=== CONTENT CHUNKING SUMMARY ===\n';
+                output += `• Content Length: ${content.length} characters\n`;
+                output += `• Content Type: ${content.includes('<') && content.includes('>') ? 'HTML/Markup' : 'Plain Text'}\n`;
+                output += `• Primary Topic Chunks: ${chunks.filter(c => c.type === 'primary_topic').length}\n`;
+                output += `• Section Chunks: ${chunks.filter(c => c.type === 'section').length}\n`;
+                output += `• List/FAQ Chunks: ${chunks.filter(c => c.type === 'list').length}\n`;
+                output += `• Paragraph Chunks: ${chunks.filter(c => c.type === 'paragraph').length}\n`;
+                output += `• Structured Data: ${chunks.filter(c => c.type === 'structured_data').length > 0 ? 'Yes' : 'No'}\n`;
+                output += `• Total Semantic Chunks: ${chunks.length}`;
+                
+                showResults(output);
+                
+            } catch (error) {
+                showError(`Analysis failed: ${error.message}`);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // Character counter function
+        function updateCharCounter() {
+            const content = document.getElementById('contentInput').value;
+            const counter = document.getElementById('charCounter');
+            counter.textContent = `${content.length} characters`;
+            
+            // Change color based on length
+            if (content.length < 50) {
+                counter.style.color = '#e74c3c';
+            } else if (content.length < 500) {
+                counter.style.color = '#f39c12';
+            } else {
+                counter.style.color = '#27ae60';
+            }
+        }
+
+        // UI Helper Functions
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+            document.querySelector('.analyze-btn').disabled = show;
+        }
+
+        function showResults(content) {
+            document.getElementById('resultsContent').textContent = content;
+            document.getElementById('results').classList.add('show');
+        }
+
+        function hideResults() {
+            document.getElementById('results').classList.remove('show');
+        }
+
+        function showError(message) {
+            document.getElementById('error').textContent = message;
+            document.getElementById('error').style.display = 'block';
+        }
+
+        function hideError() {
+            document.getElementById('error').style.display = 'none';
+        }
+    </script>
+    <div style="text-align: center; color: white; padding: 1em 0;">
+        Built with ♥️ by Anıl Yuvalı
+    </div>
+</body>
+</html>
