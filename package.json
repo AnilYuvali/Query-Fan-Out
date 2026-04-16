@@ -1,0 +1,6 @@
+{
+  "name": "Query-Fan-Out",
+  "version": "1.0.0",
+  "description": "Google AI Mode Query Fan Out Analyzer",
+  "private": true
+}
