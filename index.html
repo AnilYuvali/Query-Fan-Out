@@ -247,7 +247,7 @@
                         oninput="updateCharCounter()"
                     ></textarea>
                     <div class="char-counter">
-                        <span id="charCounter">0 / 20,000 characters</span>
+                        <span id="charCounter">0 characters</span>
                     </div>
                 </div>
 
@@ -274,27 +274,9 @@
 
     <script>
         const MIN_CONTENT_LENGTH = 50;
-        const MAX_CONTENT_LENGTH = 20000;
 
-        function formatAnalysisOutput(analysis, summary, requestId) {
-            const chunkCounts = summary.chunkCounts || {};
-            let output = '=== GOOGLE AI MODE QUERY FAN-OUT ANALYSIS ===\n\n';
-            output += analysis;
-            output += '\n\n=== CONTENT CHUNKING SUMMARY ===\n';
-            output += `• Content Length: ${summary.contentLength} characters\n`;
-            output += `• Content Type: ${summary.contentType === 'html' ? 'HTML/Markup' : 'Plain Text'}\n`;
-            output += `• Primary Topic Chunks: ${chunkCounts.primary_topic || 0}\n`;
-            output += `• Section Chunks: ${chunkCounts.section || 0}\n`;
-            output += `• List/FAQ Chunks: ${chunkCounts.list || 0}\n`;
-            output += `• Paragraph Chunks: ${chunkCounts.paragraph || 0}\n`;
-            output += `• Structured Data: ${(chunkCounts.structured_data || 0) > 0 ? 'Yes' : 'No'}\n`;
-            output += `• Total Semantic Chunks: ${summary.totalSemanticChunks || 0}`;
-
-            if (requestId) {
-                output += `\n• Request ID: ${requestId}`;
-            }
-
-            return output;
+        function formatAnalysisOutput(analysis) {
+            return `=== GOOGLE AI MODE QUERY FAN-OUT ANALYSIS ===\n\n${analysis}`;
         }
 
         async function analyzeContent() {
@@ -307,11 +289,6 @@
 
             if (content.length < MIN_CONTENT_LENGTH) {
                 showError(`Please enter more substantial content (at least ${MIN_CONTENT_LENGTH} characters)`);
-                return;
-            }
-
-            if (content.length > MAX_CONTENT_LENGTH) {
-                showError(`Please keep the content under ${MAX_CONTENT_LENGTH.toLocaleString()} characters`);
                 return;
             }
 
@@ -335,7 +312,7 @@
                     throw new Error(data.error?.message || `Request failed with status ${response.status}`);
                 }
 
-                showResults(formatAnalysisOutput(data.analysis, data.summary, data.requestId));
+                showResults(formatAnalysisOutput(data.analysis));
             } catch (error) {
                 showError(`Analysis failed: ${error.message}`);
             } finally {
@@ -347,10 +324,10 @@
         function updateCharCounter() {
             const content = document.getElementById('contentInput').value;
             const counter = document.getElementById('charCounter');
-            counter.textContent = `${content.length.toLocaleString()} / ${MAX_CONTENT_LENGTH.toLocaleString()} characters`;
+            counter.textContent = `${content.length.toLocaleString()} characters`;
             
             // Change color based on length
-            if (content.length < MIN_CONTENT_LENGTH || content.length > MAX_CONTENT_LENGTH) {
+            if (content.length < MIN_CONTENT_LENGTH) {
                 counter.style.color = '#e74c3c';
             } else if (content.length < 500) {
                 counter.style.color = '#f39c12';

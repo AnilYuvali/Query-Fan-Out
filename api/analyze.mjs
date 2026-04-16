@@ -1,8 +1,6 @@
 const MIN_CONTENT_LENGTH = 50;
-const MAX_CONTENT_LENGTH = 20000;
 const MAX_REQUEST_BYTES = 100000;
 const REQUEST_TIMEOUT_MS = 15000;
-const MAX_PROMPT_CONTENT_CHARS = 15000;
 const GEMINI_MODEL = 'gemini-3-flash-preview';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const JSON_HEADERS = {
@@ -291,18 +289,14 @@ function extractSemanticChunksFromContent(content) {
 }
 
 function buildPrompt(content, chunks) {
-  const contentExcerpt = truncate(content, MAX_PROMPT_CONTENT_CHARS);
-  const plainTextExcerpt = truncate(stripTags(content) || normalizeWhitespace(content), MAX_PROMPT_CONTENT_CHARS);
-  const contentTruncatedNote = content.length > MAX_PROMPT_CONTENT_CHARS
-    ? `\nNOTE: Original content was truncated to ${MAX_PROMPT_CONTENT_CHARS} characters for prompt size safety.`
-    : '';
+  const contentExcerpt = content;
+  const plainTextExcerpt = stripTags(content) || normalizeWhitespace(content);
 
   return `You are analyzing content for Google's AI Mode query fan-out potential. Google's AI Mode decomposes user queries into multiple sub-queries to synthesize comprehensive answers.
 
 CONTENT ANALYSIS:
 Content Length: ${content.length} characters
 Content Type: ${getContentTypeLabel(content) === 'html' ? 'HTML/Markup' : 'Plain Text'}
-${contentTruncatedNote}
 
 ORIGINAL CONTENT EXCERPT:
 ${contentExcerpt}
@@ -389,15 +383,6 @@ async function parseRequestBody(request, requestId) {
       status: 400,
       code: 'INVALID_INPUT',
       message: `Content must be at least ${MIN_CONTENT_LENGTH} characters`,
-      requestId
-    };
-  }
-
-  if (content.length > MAX_CONTENT_LENGTH) {
-    throw {
-      status: 413,
-      code: 'INVALID_INPUT',
-      message: `Content must be ${MAX_CONTENT_LENGTH} characters or fewer`,
       requestId
     };
   }
