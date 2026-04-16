@@ -2,6 +2,7 @@ const MIN_CONTENT_LENGTH = 50;
 const MAX_CONTENT_LENGTH = 20000;
 const MAX_REQUEST_BYTES = 100000;
 const REQUEST_TIMEOUT_MS = 15000;
+const MAX_PROMPT_CONTENT_CHARS = 15000;
 const GEMINI_MODEL = 'gemini-2.5-flash';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const JSON_HEADERS = {
@@ -71,6 +72,33 @@ function stripTags(html) {
 
 function truncate(text, maxLength) {
   return text.length <= maxLength ? text : text.slice(0, maxLength);
+}
+
+function buildFallbackChunks(content) {
+  const normalized = normalizeWhitespace(content);
+
+  if (!normalized) {
+    return [];
+  }
+
+  const paragraphs = normalized
+    .split(/\n\s*\n/)
+    .map((paragraph) => normalizeWhitespace(paragraph))
+    .filter(Boolean);
+
+  if (paragraphs.length > 0) {
+    return paragraphs.slice(0, 5).map((paragraph) => ({
+      type: 'paragraph',
+      content: truncate(paragraph, 300)
+    }));
+  }
+
+  return [
+    {
+      type: 'paragraph',
+      content: truncate(normalized, 300)
+    }
+  ];
 }
 
 function collectMatches(regex, input, mapper) {
@@ -237,15 +265,50 @@ function extractFromPlainText(content) {
 }
 
 function extractSemanticChunksFromContent(content) {
-  return getContentTypeLabel(content) === 'html' ? extractFromHtml(content) : extractFromPlainText(content);
+  if (getContentTypeLabel(content) !== 'html') {
+    const plainTextChunks = extractFromPlainText(content);
+    return plainTextChunks.length > 0 ? plainTextChunks : buildFallbackChunks(content);
+  }
+
+  const htmlChunks = extractFromHtml(content);
+  if (htmlChunks.length > 0) {
+    return htmlChunks;
+  }
+
+  const strippedContent = stripTags(content);
+  const strippedFallback = extractFromPlainText(strippedContent);
+
+  if (strippedFallback.length > 0) {
+    return strippedFallback;
+  }
+
+  const plainTextFallback = extractFromPlainText(content);
+  if (plainTextFallback.length > 0) {
+    return plainTextFallback;
+  }
+
+  return buildFallbackChunks(strippedContent || content);
 }
 
 function buildPrompt(content, chunks) {
+  const contentExcerpt = truncate(content, MAX_PROMPT_CONTENT_CHARS);
+  const plainTextExcerpt = truncate(stripTags(content) || normalizeWhitespace(content), MAX_PROMPT_CONTENT_CHARS);
+  const contentTruncatedNote = content.length > MAX_PROMPT_CONTENT_CHARS
+    ? `\nNOTE: Original content was truncated to ${MAX_PROMPT_CONTENT_CHARS} characters for prompt size safety.`
+    : '';
+
   return `You are analyzing content for Google's AI Mode query fan-out potential. Google's AI Mode decomposes user queries into multiple sub-queries to synthesize comprehensive answers.
 
 CONTENT ANALYSIS:
 Content Length: ${content.length} characters
 Content Type: ${getContentTypeLabel(content) === 'html' ? 'HTML/Markup' : 'Plain Text'}
+${contentTruncatedNote}
+
+ORIGINAL CONTENT EXCERPT:
+${contentExcerpt}
+
+NORMALIZED TEXT EXCERPT:
+${plainTextExcerpt}
 
 SEMANTIC CHUNKS EXTRACTED:
 ${JSON.stringify(chunks, null, 2)}
