@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google AI Mode Query Fan-Out Analyzer</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .input-section {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            border-left: 4px solid #3498db;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .input-group input, .input-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .input-group input:focus, .input-group textarea:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+
+        .content-textarea {
+            min-height: 200px;
+            resize: vertical;
+            font-family: inherit;
+        }
+
+        .analyze-btn {
+            background: linear-gradient(135deg, #3498db 0%, #2c3e50 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            font-weight: 600;
+        }
+
+        .analyze-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .analyze-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .results-section {
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 25px;
+            margin-top: 30px;
+            display: none;
+        }
+
+        .results-section.show {
+            display: block;
+        }
+
+        .results-header {
+            background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .results-content {
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.4;
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 6px;
+            border-left: 4px solid #27ae60;
+        }
+
+        .error {
+            background: #e74c3c;
+            color: white;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .instructions {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .instructions h3 {
+            color: #856404;
+            margin-bottom: 15px;
+        }
+
+        .instructions ul {
+            padding-left: 20px;
+        }
+
+        .instructions li {
+            margin-bottom: 8px;
+            color: #856404;
+        }
+
+        .char-counter {
+            text-align: right;
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Google AI Mode Query Fan-Out Analyzer</h1>
+            <p>Google AI Mode’da kullanılan query fan-out, kullanıcının yaptığı bir sorguya karşılık, eş zamanlı olarak birbiriyle ilişkili birden fazla arama yapan ve bu sonuçları birleştirerek tek bir yanıt oluşturan bir tekniktir. Bu teknik sayesinde, Google'da yapılan geleneksel bir aramaya kıyasla AI Mode'da çok daha geniş kapsamlı ve derinlemesine bilgiler sunulabiliyor.</p>
+        </div>
+
+        <div class="content">
+            <div class="instructions">
+                <h3>📋 Talimatlar</h3>
+                <ul>
+                    <li>Analiz edeceğimiz içeriği aşağıdaki içerik alanına ekliyoruz.</li>
+                    <li>"İçeriği Analiz Et" butonuna tıklıyoruz.</li>
+                    <li>Ardından tool, içerikteki semantik öbekleri çıkararak olası query fan-out sorgularını yazacak.</li>
+                    <li>Ayrıca sonuçlarda coverage puanı ve içeriği Google AI mode'a göre optimize etmek için öneriler gösterilecek.</li>
+                </ul>
+            </div>
+
+            <div class="input-section">
+                <div class="input-group">
+                    <label for="contentInput">Analiz Edilecek İçerik</label>
+                    <textarea 
+                        id="contentInput" 
+                        class="content-textarea" 
+                        placeholder="AI Mode query fan-out analizi için içeriği buraya ekle..."
+                        oninput="updateCharCounter()"
+                    ></textarea>
+                    <div class="char-counter">
+                        <span id="charCounter">0 characters</span>
+                    </div>
+                </div>
+
+                <button class="analyze-btn" onclick="analyzeContent()">
+                    🔍 İçeriği Analiz Et
+                </button>
+            </div>
+
+            <div id="loading" class="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p>İçerik analiz ediliyor...</p>
+            </div>
+
+            <div id="results" class="results-section">
+                <div class="results-header">
+                    <h3>📊 Analiz Sonuçları</h3>
+                </div>
+                <div id="resultsContent" class="results-content"></div>
+            </div>
+
+            <div id="error" class="error" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        const MIN_CONTENT_LENGTH = 50;
+
+        function formatAnalysisOutput(analysis) {
+            return `=== GOOGLE AI MODE QUERY FAN-OUT ANALYSIS ===\n\n${analysis}`;
+        }
+
+        async function analyzeContent() {
+            const content = document.getElementById('contentInput').value.trim();
+
+            if (!content) {
+                showError('Please enter content to analyze');
+                return;
+            }
+
+            if (content.length < MIN_CONTENT_LENGTH) {
+                showError(`Please enter more substantial content (at least ${MIN_CONTENT_LENGTH} characters)`);
+                return;
+            }
+
+            showLoading(true);
+            hideError();
+            hideResults();
+
+            try {
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ content })
+                });
+
+                const data = await response.json().catch(() => ({}));
+
+                if (!response.ok) {
+                    throw new Error(data.error?.message || `Request failed with status ${response.status}`);
+                }
+
+                showResults(formatAnalysisOutput(data.analysis));
+            } catch (error) {
+                showError(`Analysis failed: ${error.message}`);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // Character counter function
+        function updateCharCounter() {
+            const content = document.getElementById('contentInput').value;
+            const counter = document.getElementById('charCounter');
+            counter.textContent = `${content.length.toLocaleString()} characters`;
+            
+            // Change color based on length
+            if (content.length < MIN_CONTENT_LENGTH) {
+                counter.style.color = '#e74c3c';
+            } else if (content.length < 500) {
+                counter.style.color = '#f39c12';
+            } else {
+                counter.style.color = '#27ae60';
+            }
+        }
+
+        // UI Helper Functions
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+            document.querySelector('.analyze-btn').disabled = show;
+        }
+
+        function showResults(content) {
+            document.getElementById('resultsContent').textContent = content;
+            document.getElementById('results').classList.add('show');
+        }
+
+        function hideResults() {
+            document.getElementById('results').classList.remove('show');
+        }
+
+        function showError(message) {
+            document.getElementById('error').textContent = message;
+            document.getElementById('error').style.display = 'block';
+        }
+
+        function hideError() {
+            document.getElementById('error').style.display = 'none';
+        }
+    </script>
+    <div style="text-align: center; color: white; padding: 1em 0;">
+        Built with ♥️ by Anıl Yuvalı
+    </div>
+</body>
+</html>
